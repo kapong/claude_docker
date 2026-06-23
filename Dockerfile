@@ -46,13 +46,15 @@ RUN curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/refs/heads/master/in
     && rtk --version
 
 # --- workspace + entrypoint ----------------------------------------------
-RUN mkdir -p /workspace && chown -R node:node /workspace
+RUN mkdir -p /workspace
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/entrypoint.sh
 
-# Friendly default name for Remote Control sessions (override at runtime).
-ENV CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX=claude-docker
+# Run as root so root-owned bind mounts (the usual case on Linux) are writable.
+# IS_SANDBOX=1 is what lets --dangerously-skip-permissions run as root inside
+# this container — Claude Code otherwise refuses root for safety.
+ENV CLAUDE_REMOTE_CONTROL_SESSION_NAME_PREFIX=claude-docker \
+    IS_SANDBOX=1
 
-USER node
 WORKDIR /workspace
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

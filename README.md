@@ -45,11 +45,11 @@ Your token is saved in the session's profile dir and reused next time.
 ### Paths & profiles
 
 - **project_path** is mounted at `/workspace` (where Claude works).
-- **profile_path** is mounted as the container **HOME** (`/home/node`), so it
-  keeps every tool login for that profile — Claude (`~/.claude`), plus `gh`,
-  `git`, `ssh`, `npm`, etc. Defaults to `~/.claude_docker/<name>` — override the
-  base dir with `CLAUDE_DOCKER_HOME`. Reuse the *same* profile path across
-  sessions to share one set of logins.
+- **profile_path** is mounted as the container **HOME** (`/root`), so it keeps
+  every tool login for that profile — Claude (`~/.claude`), plus `gh`, `git`,
+  `ssh`, `npm`, etc. Defaults to `~/.claude_docker/<name>` — override the base
+  dir with `CLAUDE_DOCKER_HOME`. Reuse the *same* profile path across sessions
+  to share one set of logins.
 
 ### GPU
 
@@ -65,11 +65,9 @@ CLAUDE_DOCKER_GPU=0 claude_docker start myproj ~/code/myproj   # off
 ## What's in the image
 
 Node 22 + Claude Code, [`rtk`](https://github.com/rtk-ai/rtk), Python 3 + pip,
-`build-essential`, `git`, `ripgrep`, `fd`, `jq`. Runs as the non-root `node`
-user (uid 1000), which is why `--dangerously-skip-permissions` is allowed.
-
-> On Linux, the mounted project/profile dirs should be writable by uid 1000
-> (true for the typical first user). On Docker Desktop this is handled for you.
+`build-essential`, `git`, `ripgrep`, `fd`, `jq`. Runs as **root** so the usual
+root-owned bind mounts are writable; the image sets `IS_SANDBOX=1`, which is what
+lets `--dangerously-skip-permissions` run as root inside the container.
 
 ## Notes
 

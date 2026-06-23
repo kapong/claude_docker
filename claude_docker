@@ -73,7 +73,7 @@ cmd_start() {
     -e RC_NAME="$name" \
     $gpu \
     -v "$project:/workspace" \
-    -v "$profile:/home/node" \
+    -v "$profile:/root" \
     "$IMAGE" >/dev/null
 
   info "Started '$name'   project=$project   profile=$profile"
@@ -116,7 +116,7 @@ Usage:
 
 Notes:
   • <name> becomes the container hostname AND the Remote Control session title.
-  • <profile_path> is mounted as the container HOME (/home/node), so it keeps
+  • <profile_path> is mounted as the container HOME (/root), so it keeps
     ALL tool logins for that profile — Claude (~/.claude), gh, git, ssh, npm, etc.
   • Default profile dir: \${CLAUDE_DOCKER_HOME:-~/.claude_docker}/<name>
     (persisted across restarts; reuse the same path to keep one set of logins).
