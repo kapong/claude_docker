@@ -45,8 +45,27 @@ gpu_flags() {
 
 cmd_start() {
   local name="${1:-}" project="${2:-}" profile="${3:-}"
-  [ -n "$name" ] && [ -n "$project" ] \
-    || die "usage: claude_docker start <name> <project_path> [<profile_path>]"
+  [ -n "$name" ] || die "usage: claude_docker start <name> <project_path> [<profile_path>]"
+
+  ensure_docker
+  local cn; cn="$(cname "$name")"
+
+  # Already running → nothing to do.
+  if docker ps --format '{{.Names}}' | grep -qx "$cn"; then
+    die "'$name' is already running. Attach with: claude_docker attach $name"
+  fi
+
+  # Stopped container with this name exists → resume it (mounts are fixed at
+  # creation, so any project/profile args are ignored here).
+  if docker ps -a --format '{{.Names}}' | grep -qx "$cn"; then
+    [ -n "$project" ] && info "note: '$name' already exists — resuming it; project/profile args ignored. Run 'claude_docker rm $name' first to recreate."
+    docker start "$cn" >/dev/null
+    info "Resumed '$name'. Attach with: claude_docker attach $name"
+    return
+  fi
+
+  # New container → a project path is required.
+  [ -n "$project" ] || die "usage: claude_docker start <name> <project_path> [<profile_path>]"
   [ -d "$project" ] || die "project path not found: $project"
   project="$(abspath "$project")"
 
@@ -54,15 +73,7 @@ cmd_start() {
   mkdir -p "$profile"
   profile="$(abspath "$profile")"
 
-  ensure_docker
   ensure_image
-
-  local cn; cn="$(cname "$name")"
-  if docker ps --format '{{.Names}}' | grep -qx "$cn"; then
-    die "'$name' is already running. Attach with: claude_docker attach $name"
-  fi
-  docker rm -f "$cn" >/dev/null 2>&1 || true   # clear a stopped leftover
-
   local gpu; gpu="$(gpu_flags)"
   [ -n "$gpu" ] && info "GPU detected — enabling --gpus all (disable with CLAUDE_DOCKER_GPU=0)."
 
@@ -87,7 +98,13 @@ cmd_attach() {
 
 cmd_stop() {
   local name="${1:-}"; [ -n "$name" ] || die "usage: claude_docker stop <name>"
-  docker rm -f "$(cname "$name")" >/dev/null && info "stopped '$name'."
+  docker stop "$(cname "$name")" >/dev/null \
+    && info "stopped '$name' (resume: claude_docker start $name  •  delete: claude_docker rm $name)."
+}
+
+cmd_rm() {
+  local name="${1:-}"; [ -n "$name" ] || die "usage: claude_docker rm <name>"
+  docker rm -f "$(cname "$name")" >/dev/null && info "removed '$name'."
 }
 
 cmd_ls() {
@@ -109,13 +126,18 @@ claude_docker — Claude Code in Docker (Remote Control + skip-permissions, GPU-
 Usage:
   claude_docker start <name> <project_path> [<profile_path>]
   claude_docker attach <name>
-  claude_docker stop   <name>
+  claude_docker stop   <name>     # stop but KEEP it (resume later)
+  claude_docker rm     <name>     # stop and DELETE it
   claude_docker logs   <name>
   claude_docker ls
   claude_docker pull          # update to the latest image
 
 Notes:
   • <name> becomes the container hostname AND the Remote Control session title.
+  • start on an existing (stopped) <name> RESUMES it (keeps conversation, login,
+    and history). To recreate with a different project/profile, 'rm' it first.
+  • First run: attach, /login, then /remote-control once. After that, Remote
+    Control auto-connects on every resume because the login is already there.
   • <profile_path> is mounted as the container HOME (/root), so it keeps
     ALL tool logins for that profile — Claude (~/.claude), gh, git, ssh, npm, etc.
   • Default profile dir: \${CLAUDE_DOCKER_HOME:-~/.claude_docker}/<name>
@@ -123,7 +145,6 @@ Notes:
   • GPU auto-enables when an NVIDIA GPU is found; CLAUDE_DOCKER_GPU=1 forces,
     =0 disables. Requires the NVIDIA Container Toolkit on the host.
   • Detach (leave running): Ctrl-P then Ctrl-Q.
-  • First run: attach, then /login and /remote-control.
 EOF
 }
 
@@ -133,6 +154,7 @@ main() {
     start)        cmd_start  "$@" ;;
     attach)       cmd_attach "$@" ;;
     stop)         cmd_stop   "$@" ;;
+    rm|remove)    cmd_rm     "$@" ;;
     logs)         cmd_logs   "$@" ;;
     ls|list)      cmd_ls     "$@" ;;
     pull|update)  cmd_pull   "$@" ;;

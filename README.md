@@ -35,12 +35,18 @@ Your token is saved in the session's profile dir and reused next time.
 
 | Command | What it does |
 | --- | --- |
-| `claude_docker start <name> <project_path> [<profile_path>]` | Start a detached session. |
+| `claude_docker start <name> <project_path> [<profile_path>]` | Start a new session, or **resume** a stopped one of the same name. |
 | `claude_docker attach <name>` | Attach to a running session. |
-| `claude_docker stop <name>` | Stop and remove a session. |
+| `claude_docker stop <name>` | Stop but **keep** the session (resume later). |
+| `claude_docker rm <name>` | Stop and **delete** the session. |
 | `claude_docker logs <name>` | Follow a session's logs. |
-| `claude_docker ls` | List sessions. |
+| `claude_docker ls` | List sessions (running and stopped). |
 | `claude_docker pull` | Update to the latest image. |
+
+`stop` then `start <name>` resumes the **same** container — conversation, login,
+and history intact. To recreate with a different project/profile, `rm` it first.
+Because the login persists, **Remote Control auto-connects on every resume** once
+you've done `/login` + `/remote-control` the first time.
 
 ### Paths & profiles
 
