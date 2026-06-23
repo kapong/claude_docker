@@ -45,10 +45,11 @@ Your token is saved in the session's profile dir and reused next time.
 ### Paths & profiles
 
 - **project_path** is mounted at `/workspace` (where Claude works).
-- **profile_path** is mounted as `~/.claude` (login token, history, CLAUDE.md,
-  skills). Defaults to `~/.claude_docker/<name>` — override the base dir with
-  `CLAUDE_DOCKER_HOME`. Use the *same* profile path across sessions to reuse one
-  login.
+- **profile_path** is mounted as the container **HOME** (`/home/node`), so it
+  keeps every tool login for that profile — Claude (`~/.claude`), plus `gh`,
+  `git`, `ssh`, `npm`, etc. Defaults to `~/.claude_docker/<name>` — override the
+  base dir with `CLAUDE_DOCKER_HOME`. Reuse the *same* profile path across
+  sessions to share one set of logins.
 
 ### GPU
 

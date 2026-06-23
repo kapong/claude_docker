@@ -73,7 +73,7 @@ cmd_start() {
     -e RC_NAME="$name" \
     $gpu \
     -v "$project:/workspace" \
-    -v "$profile:/home/node/.claude" \
+    -v "$profile:/home/node" \
     "$IMAGE" >/dev/null
 
   info "Started '$name'   project=$project   profile=$profile"
@@ -116,8 +116,10 @@ Usage:
 
 Notes:
   • <name> becomes the container hostname AND the Remote Control session title.
+  • <profile_path> is mounted as the container HOME (/home/node), so it keeps
+    ALL tool logins for that profile — Claude (~/.claude), gh, git, ssh, npm, etc.
   • Default profile dir: \${CLAUDE_DOCKER_HOME:-~/.claude_docker}/<name>
-    (holds your login token + config, persisted across restarts).
+    (persisted across restarts; reuse the same path to keep one set of logins).
   • GPU auto-enables when an NVIDIA GPU is found; CLAUDE_DOCKER_GPU=1 forces,
     =0 disables. Requires the NVIDIA Container Toolkit on the host.
   • Detach (leave running): Ctrl-P then Ctrl-Q.
