@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# claude_docker — run Claude Code (Remote Control + --dangerously-skip-permissions)
+# in Docker, with automatic GPU passthrough when an NVIDIA GPU is present.
+set -euo pipefail
+
+IMAGE="${CLAUDE_DOCKER_IMAGE:-ghcr.io/kapong/claude_docker:latest}"
+PREFIX="claude_docker"
+PROFILE_ROOT="${CLAUDE_DOCKER_HOME:-$HOME/.claude_docker}"
+
+die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
+info() { printf '%s\n'        "$*" >&2; }
+cname() { printf '%s_%s' "$PREFIX" "$1"; }
+abspath() { ( cd "$1" 2>/dev/null && pwd ); }
+
+ensure_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    if [ "$(uname -s)" = "Linux" ]; then
+      info "Docker not found — installing via get.docker.com (needs sudo)…"
+      curl -fsSL https://get.docker.com | sh
+      command -v docker >/dev/null 2>&1 \
+        || die "Docker install failed; install manually: https://docs.docker.com/engine/install/"
+    else
+      die "Docker not found. Install Docker Desktop: https://docs.docker.com/desktop/"
+    fi
+  fi
+  docker info >/dev/null 2>&1 \
+    || die "Docker is installed but the daemon isn't running. Start Docker and retry."
+}
+
+ensure_image() {
+  docker image inspect "$IMAGE" >/dev/null 2>&1 \
+    || { info "Pulling $IMAGE …"; docker pull "$IMAGE"; }
+}
+
+# Echo "--gpus all" when a GPU should be used. Honors CLAUDE_DOCKER_GPU.
+gpu_flags() {
+  case "${CLAUDE_DOCKER_GPU:-auto}" in
+    0|no|false|off) return 0 ;;
+    1|yes|true|on)  printf '%s' "--gpus all"; return 0 ;;
+  esac
+  if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+    printf '%s' "--gpus all"
+  fi
+}
+
+cmd_start() {
+  local name="${1:-}" project="${2:-}" profile="${3:-}"
+  [ -n "$name" ] && [ -n "$project" ] \
+    || die "usage: claude_docker start <name> <project_path> [<profile_path>]"
+  [ -d "$project" ] || die "project path not found: $project"
+  project="$(abspath "$project")"
+
+  [ -n "$profile" ] || profile="$PROFILE_ROOT/$name"
+  mkdir -p "$profile"
+  profile="$(abspath "$profile")"
+
+  ensure_docker
+  ensure_image
+
+  local cn; cn="$(cname "$name")"
+  if docker ps --format '{{.Names}}' | grep -qx "$cn"; then
+    die "'$name' is already running. Attach with: claude_docker attach $name"
+  fi
+  docker rm -f "$cn" >/dev/null 2>&1 || true   # clear a stopped leftover
+
+  local gpu; gpu="$(gpu_flags)"
+  [ -n "$gpu" ] && info "GPU detected — enabling --gpus all (disable with CLAUDE_DOCKER_GPU=0)."
+
+  # shellcheck disable=SC2086
+  docker run -d -it --init \
+    --name "$cn" \
+    --hostname "$name" \
+    -e RC_NAME="$name" \
+    $gpu \
+    -v "$project:/workspace" \
+    -v "$profile:/home/node/.claude" \
+    "$IMAGE" >/dev/null
+
+  info "Started '$name'   project=$project   profile=$profile"
+  info "Attach with:  claude_docker attach $name"
+}
+
+cmd_attach() {
+  local name="${1:-}"; [ -n "$name" ] || die "usage: claude_docker attach <name>"
+  docker attach "$(cname "$name")"
+}
+
+cmd_stop() {
+  local name="${1:-}"; [ -n "$name" ] || die "usage: claude_docker stop <name>"
+  docker rm -f "$(cname "$name")" >/dev/null && info "stopped '$name'."
+}
+
+cmd_ls() {
+  docker ps -a --filter "name=^/${PREFIX}_" \
+    --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' | sed "s/${PREFIX}_//"
+}
+
+cmd_logs() {
+  local name="${1:-}"; [ -n "$name" ] || die "usage: claude_docker logs <name>"
+  docker logs -f "$(cname "$name")"
+}
+
+cmd_pull() { ensure_docker; docker pull "$IMAGE"; }
+
+usage() {
+  cat <<EOF
+claude_docker — Claude Code in Docker (Remote Control + skip-permissions, GPU-aware)
+
+Usage:
+  claude_docker start <name> <project_path> [<profile_path>]
+  claude_docker attach <name>
+  claude_docker stop   <name>
+  claude_docker logs   <name>
+  claude_docker ls
+  claude_docker pull          # update to the latest image
+
+Notes:
+  • <name> becomes the container hostname AND the Remote Control session title.
+  • Default profile dir: \${CLAUDE_DOCKER_HOME:-~/.claude_docker}/<name>
+    (holds your login token + config, persisted across restarts).
+  • GPU auto-enables when an NVIDIA GPU is found; CLAUDE_DOCKER_GPU=1 forces,
+    =0 disables. Requires the NVIDIA Container Toolkit on the host.
+  • Detach (leave running): Ctrl-P then Ctrl-Q.
+  • First run: attach, then /login and /remote-control.
+EOF
+}
+
+main() {
+  local sub="${1:-help}"; shift || true
+  case "$sub" in
+    start)        cmd_start  "$@" ;;
+    attach)       cmd_attach "$@" ;;
+    stop)         cmd_stop   "$@" ;;
+    logs)         cmd_logs   "$@" ;;
+    ls|list)      cmd_ls     "$@" ;;
+    pull|update)  cmd_pull   "$@" ;;
+    help|-h|--help) usage ;;
+    *) usage; die "unknown command: $sub" ;;
+  esac
+}
+main "$@"

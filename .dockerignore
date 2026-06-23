@@ -1,0 +1,9 @@
+# Keep the build context tiny — only the Dockerfile + entrypoint are needed.
+.git
+.gitignore
+.dockerignore
+.github
+README.md
+Makefile
+install.sh
+claude_docker
